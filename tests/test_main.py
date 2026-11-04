@@ -172,17 +172,38 @@ def test_run_repo_path_prompt_file(mocker: MockerFixture, tmp_path: Path) -> Non
     _run_repo_path_prompt(mocker, tmp_path, bad_path=file)
 
 
-def test_run_uses_repo_path_argument(mocker: MockerFixture, tmp_path: Path) -> None:
+def _run_with_repo_path(
+    mocker: MockerFixture, repo_path: Path
+) -> tuple[MockType, MockType, MockType]:
+    """Returns (website, sync_repo, run_repo_path_prompt) after running main.run with a repo path."""
     website = mocker.patch.object(main, "Website").return_value
     mocker.patch.object(main, "run_login_prompt")
     mocker.patch.object(main, "scrape_tasks", return_value=[])
     sync_repo = mocker.patch.object(main, "sync_repo")
     run_repo_path_prompt = mocker.patch.object(main, "run_repo_path_prompt")
 
-    main.run(repo_path=tmp_path)
+    main.run(repo_path=repo_path)
+    return website, sync_repo, run_repo_path_prompt
+
+
+def test_run_uses_repo_path_argument(mocker: MockerFixture, tmp_path: Path) -> None:
+    website, sync_repo, run_repo_path_prompt = _run_with_repo_path(mocker, tmp_path)
 
     run_repo_path_prompt.assert_not_called()
     sync_repo.assert_called_once_with(website, [], tmp_path)
+
+
+def test_run_makes_repo_path_absolute(
+    mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _, sync_repo, _ = _run_with_repo_path(mocker, Path("./checklist"))
+    sync_repo.assert_called_once_with(mocker.ANY, [], tmp_path / "checklist")
+
+
+def test_run_expands_user_in_repo_path(mocker: MockerFixture) -> None:
+    _, sync_repo, _ = _run_with_repo_path(mocker, Path("~/checklist"))
+    sync_repo.assert_called_once_with(mocker.ANY, [], Path.home() / "checklist")
 
 
 class TestRun:

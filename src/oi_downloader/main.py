@@ -98,6 +98,8 @@ def run(repo_path: Path | None = None) -> None:
 
     if repo_path is None:
         repo_path = run_repo_path_prompt()
+    repo_path = repo_path.expanduser().absolute()
+
     sync_repo(website, tasks, repo_path)
 
     try:
