@@ -1,5 +1,6 @@
 import argparse
 import getpass
+import os
 import sys
 from collections.abc import Sequence
 from importlib.metadata import PackageNotFoundError, metadata
@@ -113,12 +114,13 @@ def main():
     try:
         run(args.repo_path)
     except KeyboardInterrupt:
-        sys.exit(1)
-    # parsers raise AssertionError on unexpected website structure
+        if os.name == "nt":
+            sys.exit(-1073741510)
+        else:
+            sys.exit(130)
     except AssertionError as e:
-        print(f"🚨 Error occurred, contact developer with full error log: {e}")
-        sys.exit(1)
-    sys.exit(0)
+        # parsers raise this error on unexpected website structure
+        sys.exit(f"🚨 Error occurred, contact developer with full error log: {e}")
 
 
 if __name__ == "__main__":
