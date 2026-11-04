@@ -1,3 +1,5 @@
+from importlib.metadata import metadata as pkg_metadata
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 from unittest.mock import call
 
@@ -16,6 +18,78 @@ from oi_downloader.web import (
     SUBMISSION_PAGE,
     TASKS_PAGE,
 )
+
+
+def test_package_metadata_success() -> None:
+    meta = pkg_metadata(main.DISTRIBUTION_NAME)
+
+    assert main._package_metadata() == (meta["Name"], meta["Version"], meta["Summary"])
+
+
+def test_package_metadata_missing(mocker: MockerFixture) -> None:
+    mocker.patch.object(main, "metadata", side_effect=main.PackageNotFoundError)
+
+    assert main._package_metadata() == (main.DISTRIBUTION_NAME, "unknown", "")
+
+
+def test_parse_args_default_repo_path() -> None:
+    args = main.parse_args([])
+    assert args.repo_path is None
+
+
+def test_parse_args_repo_path(tmp_path: Path) -> None:
+    assert main.is_repo_path_valid(tmp_path) is True
+
+    args = main.parse_args(["--repo-path", str(tmp_path)])
+    assert args.repo_path == tmp_path
+
+
+def test_parse_args_repo_path_short(tmp_path: Path) -> None:
+    assert main.is_repo_path_valid(tmp_path) is True
+
+    args = main.parse_args(["-r", str(tmp_path)])
+    assert args.repo_path == tmp_path
+
+
+def test_parse_args_invalid_repo_path(tmp_path: Path) -> None:
+    missing = tmp_path / "missing"
+    assert main.is_repo_path_valid(missing) is False
+
+    with pytest.raises(SystemExit) as exc:
+        main.parse_args(["--repo-path", str(missing)])
+
+    assert exc.value.code == 2
+
+
+def test_parse_args_version(capsys: pytest.CaptureFixture) -> None:
+    with pytest.raises(SystemExit):
+        main.parse_args(["--version"])
+
+    expected = f"{main.DISTRIBUTION_NAME} {pkg_version(main.DISTRIBUTION_NAME)}"
+    assert expected in capsys.readouterr().out
+
+
+def test_parse_args_help(capsys: pytest.CaptureFixture) -> None:
+    with pytest.raises(SystemExit):
+        main.parse_args(["--help"])
+
+    out = capsys.readouterr().out
+    assert main.DISTRIBUTION_NAME in out
+    assert "--repo-path" in out
+
+
+def test_is_repo_path_valid_directory(tmp_path: Path) -> None:
+    assert main.is_repo_path_valid(tmp_path) is True
+
+
+def test_is_repo_path_valid_missing(tmp_path: Path) -> None:
+    assert main.is_repo_path_valid(tmp_path / "missing") is False
+
+
+def test_is_repo_path_valid_file(tmp_path: Path) -> None:
+    file = tmp_path / "file"
+    file.write_text("content")
+    assert main.is_repo_path_valid(file) is False
 
 
 def test_run_login_prompt_success(mocker: MockerFixture) -> None:
@@ -58,6 +132,11 @@ def _run_repo_path_prompt(
     good = tmp_path / "good"
     good.mkdir()
 
+    # ensure the paths are valid and invalid as expected
+    assert main.is_repo_path_valid(good) is True
+    if bad_path is not None:
+        assert main.is_repo_path_valid(bad_path) is False
+
     paths = [str(bad_path)] if bad_path is not None else []
     paths.append(str(good))
 
@@ -91,6 +170,19 @@ def test_run_repo_path_prompt_file(mocker: MockerFixture, tmp_path: Path) -> Non
     file = tmp_path / "file"
     file.write_text("content")
     _run_repo_path_prompt(mocker, tmp_path, bad_path=file)
+
+
+def test_run_uses_repo_path_argument(mocker: MockerFixture, tmp_path: Path) -> None:
+    website = mocker.patch.object(main, "Website").return_value
+    mocker.patch.object(main, "run_login_prompt")
+    mocker.patch.object(main, "scrape_tasks", return_value=[])
+    sync_repo = mocker.patch.object(main, "sync_repo")
+    run_repo_path_prompt = mocker.patch.object(main, "run_repo_path_prompt")
+
+    main.run(repo_path=tmp_path)
+
+    run_repo_path_prompt.assert_not_called()
+    sync_repo.assert_called_once_with(website, [], tmp_path)
 
 
 class TestRun:

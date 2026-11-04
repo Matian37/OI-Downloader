@@ -46,7 +46,8 @@ jobs:
 
       - name: Build Executable
         run: >
-          uv run pyinstaller --onefile --clean --noconfirm --name ${{ env.BIN }} ${{ env.ENTRY_POINT }}
+          uv run pyinstaller --onefile --clean --noconfirm --copy-metadata oi-downloader
+          --name ${{ env.BIN }} ${{ env.ENTRY_POINT }}
 
       - name: Make executable and archive
         shell: bash
